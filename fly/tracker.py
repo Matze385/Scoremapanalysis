@@ -58,8 +58,8 @@ class Tracker:
     #hypotheses: object of class Hypotheses with hypotheses information
     #max_move_per_frame: only hypotheses with this or lower distance get possible connections
     #threshold_abs: minimal value of scores, important for detection features that no detection energy is always higher than detection energy
-    def __init__(self, hypotheses, threshold_abs, max_move_per_frame = 25):
-        self.graph = GraphDict()
+    def __init__(self, hypotheses, threshold_abs, max_move_per_frame = 25, optimizerEpGap=0.05):
+        self.graph = GraphDict(optimizerEpGap=optimizerEpGap)
         self.threshold_abs = threshold_abs
         self.max_move_per_frame= max_move_per_frame
         #save hypotheses input in own datastructure
@@ -76,8 +76,8 @@ class Tracker:
         self.graph_complete = False
         #attributes for initialization of first and last frame
         self.neutral_feature=[[0.],[0.]] 
-        self.detection_reward = -9.*10**6.
-        self.no_detection_reward = -9.*10**6
+        self.detection_reward = -9.*10**3.
+        self.no_detection_reward = -9.*10**3
         #current id for enumerate hypothesis
         self.current_id = 1 
         #ids of true objects in first frame  
@@ -353,37 +353,67 @@ class Tracker:
     #draw track history in images
     #path_imgs_clean: relative path to raw images without tracks, raw images should have name in format RawData_2970.png
     #path_imgs_tracks: relative path to raw images with tracks, track images have name in format Track_2970.png
-    #coordinates: result of get_coordinates
+    #length_arrow: length of arrow in pixels for visualization of orientation of object
     #rescale_factor: factor for rescaling from scoremap to orginal img
-    def draw_tracks(self, path_imgs_clean, path_imgs_tracks, rescale_factor=2.):
+    def draw_tracks(self, path_imgs_clean, path_imgs_tracks, length_arrow, rescale_factor=2.):
         time_interval = self.last_t - self.first_t
-        for dt in np.arange(1, time_interval+1):
+        for dt in np.arange(0, time_interval+1):
             img = mpimg.imread(path_imgs_clean + 'RawData_' + str(self.first_t+dt) + '.png')
             fig = plt.figure()
+            #fig.set_size_inches(float(img.shape[1])/float(img.shape[0]), 1., forward=False)
+            #ax = plt.Axes(fig, [0., 0., 1., 1.])
+            #ax.set_axis_off()
+            #fig.add_axes(ax)
             ax = fig.add_subplot(1,1,1)
             ax.imshow(img, cmap=matplotlib.cm.Greys_r)
-            ax.get_xaxis().set_visible(False)
-            ax.get_yaxis().set_visible(False)
             #extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-            """
+            
             for start_id in self.start_ids:
                 track_ids = self.get_track(start_id)
-                coordinates = self.get_coordinates(track_ids)    
+                coordinates = self.get_coordinates(track_ids)  
+                ax.scatter(rescale_factor*coordinates[0][1], rescale_factor*coordinates[0][0], marker='x', color='r', s=0.5, alpha=0.7)
+                #for coordinate in coordinates:
+                   # print( coordinate[0])  
                 #print('length of coordinates', len(coordinates))
                 line_x = []
                 line_y = []
-                for step in np.arange(min(dt+1, len(coordinates))):
+                track_length = min(dt+1, len(coordinates))
+                for step in np.arange(track_length):
                     line_x.append(rescale_factor * coordinates[step][0])
                     line_y.append(rescale_factor * coordinates[step][1])
-                ax.plot(line_y, line_x, linewidth=0.8)
-            """
+                ax.plot(line_y, line_x, linewidth=1., color='r', alpha=0.6)
+                arrow_x_start = line_x[-1]
+                arrow_y_start = line_y[-1]
+                arrow_delta_x = np.sin(np.pi/180.*coordinates[track_length-1][2])*length_arrow
+                arrow_delta_y = -np.cos(np.pi/180.*coordinates[track_length-1][2])*length_arrow
+                if not len(line_x) == 0:
+                    ax.arrow(arrow_y_start, arrow_x_start, arrow_delta_x , arrow_delta_y , head_width=4, head_length=8, fc='r', ec='r', alpha=0.7, width=0.8)
+            ax.get_xaxis().set_visible(False)
+            ax.get_yaxis().set_visible(False)
             #ax.axis('off')
             #ax.set_aspect(abs((extent[1]-extent[0])/(extent[3]-extent[2])))
             #ax.set_aspect('equal')
             #fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
             #fig.tight_layout()
-            fig.savefig(path_imgs_tracks + 'Track_' + str(self.first_t+dt) + '.png', cmap=matplotlib.cm.Greys_r, bbox_inches='tight', pad_inches=0, dpi=300)
-           
+            fig.savefig(path_imgs_tracks + 'Track_' + str(self.first_t+dt) + '.png', cmap=matplotlib.cm.Greys_r, bbox_inches='tight', pad_inches=-0.6, dpi=330)
+
+
+#function to find true_det_idc when using new lower threshold
+#hypos_old: hypos of old threshold array [samples, attributes]
+#true_det_old: indices of true detection with old threshold
+#hypos new: hypos of new threshold array [samples, attributes]
+def find_hypo_idx(hypos_new, true_det_old, hypos_old):
+    true_det_new = []
+    for old_det_idx in true_det_old:
+        old_detection = hypos_old[old_det_idx,:] 
+        n_samples_new = hypos_new.shape[0]
+        for idx in np.arange(n_samples_new):
+            if (old_detection == hypos_new[idx,:]).all():
+                true_det_new.append(idx)
+                break
+    return true_det_new
+    
+       
 
 if __name__ == "__main__":
     
@@ -394,7 +424,9 @@ if __name__ == "__main__":
 
     #read in parameter
     path_scoremaps = '../../Deformabel-Part-Model/ccv/samples/fly/pred/scoremap/'
-    threshold_abs = 0.35
+    energy_gap_graphical_model = 0.02
+    threshold_abs = 0.08
+    threshold_abs_035 = 0.35
     max_move_per_frame = 25
     start_idx = 2970
     n_idx = 20
@@ -403,14 +435,21 @@ if __name__ == "__main__":
     """
     generate hypotheses
     """  
-    hypotheses = Hypotheses()
+    hypotheses_035 = Hypotheses()
     #hypotheses.add_frame(1, feature)
     
         
     for idx in np.arange(start_idx, start_idx + n_idx):
         stack = ScoreStack(idx, n_rot, x_center=x_center, y_center=y_center, path_scoremaps=path_scoremaps)
-        hypotheses.add_frame(idx, stack.extract_hypotheses(threshold_abs=threshold_abs))
+        hypotheses_035.add_frame(idx, stack.extract_hypotheses(threshold_abs=threshold_abs_035))
+    
+    hypotheses = Hypotheses()
      
+    for idx in np.arange(start_idx, start_idx + n_idx):
+        stack = ScoreStack(idx, n_rot, x_center=x_center, y_center=y_center, path_scoremaps=path_scoremaps)
+        hypotheses.add_frame(idx, stack.extract_hypotheses(threshold_abs=threshold_abs))
+    
+
     #print( 'last frame:')
     #print hypotheses.frames[-1][1]
     #print len(hypotheses.frames[-1][1])
@@ -419,14 +458,20 @@ if __name__ == "__main__":
     perform tracking
     """
 
-    tracker = Tracker(hypotheses, threshold_abs, max_move_per_frame=max_move_per_frame)
-    true_det_first_t = [0, 3, 5, 6, 7, 8, 13, 14, 15, 16, 18, 20, 21, 24, 25, 26, 27, 29, 31]
-    true_det_last_t = [0, 1, 2, 3, 4, 5, 9, 10, 13, 12, 14, 18, 19, 20, 21, 22, 23, 31, 32]
+    tracker = Tracker(hypotheses, threshold_abs, max_move_per_frame=max_move_per_frame, optimizerEpGap=energy_gap_graphical_model)
+    true_det_first_t_035 = [0, 3, 5, 6, 7, 8, 13, 14, 15, 16, 18, 20, 21, 24, 25, 26, 27, 29, 31]
+    true_det_last_t_035 = [0, 1, 2, 3, 4, 5, 9, 10, 13, 12, 14, 18, 19, 20, 21, 22, 23, 31, 32]
+    true_det_first_t = find_hypo_idx(hypotheses.frames[0][1], true_det_first_t_035, hypotheses_035.frames[0][1])
+    true_det_last_t = find_hypo_idx(hypotheses.frames[-1][1], true_det_last_t_035, hypotheses_035.frames[-1][1])
     #put all energies on one scale
     weights = [10./float(max_move_per_frame),1./180., 10., 1., 1. ] #[trans_move, trans_angle, detection, appearance, disappearance ]
-    tracker.track(true_det_first_t, true_det_last_t, weights, print_result=True)
-    print ('dest', tracker.find_dest(15))
+    tracker.track(true_det_first_t, true_det_last_t, weights, print_result=False)
     tracker.print_status()
-    tracker.draw_tracks('images_with_tracks/clean/', 'images_with_tracks/with_tracks/')
+    tracker.draw_tracks('images_with_tracks/clean/', 'images_with_tracks/with_tracks/', length_arrow=15)
+    print true_det_first_t
+    print true_det_last_t
     #for track_id in tracker.start_ids:
-     #   print tracker.draw_track('images_with_tracks' ,tracker.get_coordinates(tracker.get_track(track_id)))
+     #   track_x = [float(track_id)]
+      #  for coordinate in  tracker.get_coordinates(tracker.get_track(track_id)):
+       #     track_x.append(coordinate[0])
+        #print track_x

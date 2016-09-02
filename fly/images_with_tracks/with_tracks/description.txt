@@ -1,0 +1,11 @@
+detection reward = -9*10**3
+detection_penalty = 9*10**3
+
+frames: 2970 to 2989
+
+true_det_first_t_035 = [0, 3, 5, 6, 7, 8, 13, 14, 15, 16, 18, 20, 21, 24, 25, 26, 27, 29, 31]
+true_det_last_t_035 = [0, 1, 2, 3, 4, 5, 9, 10, 13, 12, 14, 18, 19, 20, 21, 22, 23, 31, 32]
+
+weights = [10./float(max_move_per_frame),1./180., 10., 1., 1. ] #[trans_move, trans_angle, detection, appearance, disappearance ]
+
+
