@@ -1,0 +1,23 @@
+detection reward = -9*10**3
+detection_penalty = 9*10**3
+
+frames: 2900 to 2950
+
+max_move_per_frame = 25
+energy_gap_graphical_model = 0.02
+x_center = 510/2
+y_center = 514/2
+rotations = 8
+
+#automatic start_idc search
+    radius_hypos = 4.
+    centers_2900 = np.array([[60., 329.], [61., 360.], [129., 393.], [220., 452.], [233., 460.], [307., 455.], [310., 473.], [276., 343.], [454., 354.], [457., 337.], [462., 344.], [469., 272.], [467., 258.], [392., 88.], [405., 76.], [405., 86.], [380., 88.], [154., 51.], [143., 60.] ])
+    centers_2950 = np.array([[50., 319.], [56., 333.], [127., 391.], [232., 453.], [231., 428.], [217., 451.], [304., 454.], [277., 343.], [449., 257.], [470., 275.], [465., 263.], [466., 247.], [476., 241.], [468., 197.], [464., 184.], [346., 63.], [360., 66.], [296., 45.], [314., 45.] ])
+    #print()
+        
+    true_det_first_t_035 = tracker_035.find_hypo_idc_auto(start_idx, centers_2900, radius_hypos)   
+    true_det_last_t_035 = tracker_035.find_hypo_idc_auto(start_idx + n_idx-1, centers_2950, radius_hypos)
+    true_det_first_t = find_hypo_idx(hypotheses.frames[0][1], true_det_first_t_035, hypotheses_035.frames[0][1])
+    true_det_last_t = find_hypo_idx(hypotheses.frames[-1][1], true_det_last_t_035, hypotheses_035.frames[-1][1])
+
+

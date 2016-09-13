@@ -2,8 +2,11 @@ import numpy as np
 import h5py
 from skimage.transform import rotate
 from skimage.draw import circle
+from skimage.morphology import disk
+from skimage.filters import rank
 import os.path
 from scipy.ndimage.filters import maximum_filter
+from scipy.ndimage.filters import gaussian_laplace
 from skimage.feature import peak_local_max
 
 #for show_3D_surface
@@ -17,7 +20,10 @@ import matplotlib.pyplot as plt
 
 class ScoreStack:
     #checks if data is available in correct format, initialize class attributes and create stack in correct shape, if readin is True stack is read in else empty
-    def __init__(self, img, stack_height, x_center=0, y_center=0,  path_scoremaps='scoremaps/', dataset_name='data', readin='True', transform='True'):
+    #LoG: if Laplacian of Gaussian transformation should be performed for blob detection
+    #sigma_LoG: sigma for LoG transform
+    #substract_mean: if local maxima should be substracted by mean value within circle with radius radius_mean, does not work good
+    def __init__(self, img, stack_height, x_center=0, y_center=0,  path_scoremaps='scoremaps/', dataset_name='data', readin=True, transform=True,LoG=False, sigma_LoG=3., substract_mean = False, radius_mean=3.):
         self.img = img #index of scoremap 
         self.path_scoremaps = path_scoremaps
         self.dataset_name = dataset_name
@@ -34,6 +40,11 @@ class ScoreStack:
         if transform:
             assert(self.have_data)
             self.transform()
+        if LoG:
+            self.transform_LoG(sigma_LoG)
+        if substract_mean:
+            self.substract_mean(radius_mean)
+
 
     #helper fct for read_in
     def exist_files(self):
@@ -119,6 +130,24 @@ class ScoreStack:
                 self.score_stack[:,:,i_rot] *= 1/norm_factor 
                 self.score_stack[:,:,i_rot] = rotate(self.score_stack[:,:,i_rot], 360.-angle, resize = False, center = (self.y_center, self.x_center))
                 self.score_stack[:,:,i_rot] *= norm_factor 
+    
+    #LoG as blob detector
+    def transform_LoG(self, sigma):
+        for i_rot in np.arange(self.stack_height):
+            self.score_stack[:,:,i_rot] = -gaussian_laplace(self.score_stack[:,:,i_rot], sigma)
+            
+
+    #transform score stack by substracting meanvalue within area of a disk
+    #does not work properly
+    def substract_mean(self, radius_disk):
+        circle = disk(radius_disk)
+        for i_rot in np.arange(self.stack_height):
+            stack_slice = self.score_stack[:,:,i_rot]
+            norm_factor = max(stack_slice.min(), stack_slice.max(), key=abs)
+            stack_slice *= 1./norm_factor 
+            stack_slice = np.array(rank.mean(stack_slice, selem=circle), dtype=np.float32)
+            stack_slice *= norm_factor
+            self.score_stack[:,:,i_rot] = self.score_stack[:,:,i_rot]-stack_slice
 
     #computes the maxima in all scoremaps
     #radius: radius in px for circle around current px for looking for maxima, for footprint
@@ -167,18 +196,18 @@ if __name__ == '__main__':
     n_scoremaps = 200
 
 
-    stack_2989 = ScoreStack(2989, n_rot, x_center=x_center, y_center=y_center, path_scoremaps=path_scoremaps)
-    stack_2989.write_stack()
-    x_start = 513/2
-    y_start = 922/2
-    x_end = 533/2
-    y_end = 935/2
-    i_rot = 3
-    hypos = stack_2989.extract_hypotheses(threshold_abs=0.35)
-    print hypos[10,:]
+    stack_2934 = ScoreStack(2934, n_rot, x_center=x_center, y_center=y_center, path_scoremaps=path_scoremaps, LoG=True, sigma_LoG=1.)
+    stack_2934.write_stack()
+    x_start = 247
+    y_start = 439
+    x_end = 276
+    y_end = 453
+    i_rot = 6
+    #hypos = stack_2989.extract_hypotheses(threshold_abs=0.35)
+    #print hypos[10,:]
     #for i in np.arange(stack_2942.stack_height)
     #    print len(maxima[i])
-    #stack_2942.show(x_start, y_start, x_end, y_end , i_rot, zlim=(-1.,1.1))
+    stack_2934.show(x_start, y_start, x_end, y_end , i_rot, zlim=(-1.,1.1))
     #stack_2942.write_stack() 
 
 

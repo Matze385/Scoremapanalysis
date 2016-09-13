@@ -1,0 +1,74 @@
+detection reward = -9*10**3
+detection_penalty = 9*10**3
+
+frames: 2900 to 2950
+
+ #rotational paramater
+    x_center = 510/2
+    y_center = 514/2
+    n_rot = 8
+
+    #read in parameter
+    path_scoremaps = '../../Deformabel-Part-Model/ccv/samples/fly/pred/scoremap/'
+    energy_gap_graphical_model = 0.01
+    threshold_abs = 0.3
+    threshold_abs_035 = 0.35
+    max_move_per_frame = 10
+    conflict_radius = 5.
+    radius_disk = 2.
+    angle_weights = [0., 20., 135., 180., 180.]
+    start_idx = 2900
+    n_idx = 51
+    
+       
+    """
+    #generate hypotheses
+    """  
+    hypotheses_035 = Hypotheses()
+    #hypotheses.add_frame(1, feature)
+    
+        
+    for idx in np.arange(start_idx, start_idx + n_idx):
+        stack = ScoreStack(idx, n_rot, x_center=x_center, y_center=y_center, path_scoremaps=path_scoremaps, LoG=True, sigma_LoG= 1.)
+        hypotheses_035.add_frame(idx, stack.extract_hypotheses(threshold_abs=threshold_abs_035))
+    
+    hypotheses = Hypotheses()
+     
+    for idx in np.arange(start_idx, start_idx + n_idx):
+        stack = ScoreStack(idx, n_rot, x_center=x_center, y_center=y_center, path_scoremaps=path_scoremaps, LoG=True, sigma_LoG=1.)
+        hypotheses.add_frame(idx, stack.extract_hypotheses(threshold_abs=threshold_abs))
+    
+    
+    #print( 'last frame:')
+    #print hypotheses.frames[-1][1]
+    #print len(hypotheses.frames[-1][1])
+    
+    """
+    #perform tracking
+    """
+    
+    tracker_035 = Tracker(hypotheses_035, threshold_abs_035, max_move_per_frame=max_move_per_frame, optimizerEpGap=energy_gap_graphical_model)
+    tracker = Tracker(hypotheses, threshold_abs, max_move_per_frame=max_move_per_frame, optimizerEpGap=energy_gap_graphical_model)
+    #tracker.find_hypo_idc(start_idx, np.array([154.,51.]), 10.)
+    #print tracker.hypotheses[0][1]
+    
+    #automatic start_idc search
+    radius_hypos = 4.
+    centers_2900 = np.array([[60., 329.], [61., 360.], [129., 393.], [220., 452.], [233., 460.], [307., 455.], [310., 473.], [276., 343.], [454., 354.], [457., 337.], [462., 344.], [469., 272.], [467., 258.], [392., 88.], [405., 76.], [405., 86.], [380., 88.], [154., 51.], [143., 60.] ])
+    centers_2950 = np.array([[50., 319.], [56., 333.], [127., 391.], [232., 453.], [231., 428.], [217., 451.], [304., 454.], [277., 343.], [449., 257.], [470., 275.], [465., 263.], [466., 247.], [476., 241.], [468., 197.], [464., 184.], [346., 63.], [360., 66.], [296., 45.], [314., 45.] ])
+    #print()
+        
+    true_det_first_t_035 = tracker_035.find_hypo_idc_auto(start_idx, centers_2900, radius_hypos)   
+    true_det_last_t_035 = tracker_035.find_hypo_idc_auto(start_idx + n_idx-1, centers_2950, radius_hypos)
+    true_det_first_t = find_hypo_idx(hypotheses.frames[0][1], true_det_first_t_035, hypotheses_035.frames[0][1])
+    true_det_last_t = find_hypo_idx(hypotheses.frames[-1][1], true_det_last_t_035, hypotheses_035.frames[-1][1])
+    #put all energies on one scale
+    weights = [1./float(max_move_per_frame), 3./180., 7., 1., 1. ] #[trans_move, trans_angle, detection, appearance, disappearance ]
+    tracker.track(true_det_first_t, true_det_last_t, weights, conflict_radius, angle_weights, print_result=False)
+    tracker.print_status()
+    start_ids = tracker.start_ids
+    #start_ids.remove(58)
+    #start_ids.remove(20)
+    tracker.draw_tracks('images_with_tracks/clean/', 'images_with_tracks/with_tracks/', length_arrow=15, all_tracks=False, track_start_ids=start_ids)
+
+
